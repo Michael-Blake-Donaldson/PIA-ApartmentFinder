@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  # ---- PostgreSQL ----
+  postgres:
+    image: postgres:16-alpine
+    container_name: pia_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-pia_db}
+      POSTGRES_USER: ${DB_USERNAME:-pia_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_strong_password}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-pia_user} -d ${DB_NAME:-pia_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Mailhog (dev mail catcher) ----
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: pia_mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI → http://localhost:8025
+    profiles:
+      - dev
+
+  # ---- Backend ----
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pia_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-pia_db}
+      DB_USERNAME: ${DB_USERNAME:-pia_user}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme_strong_password}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-900000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      MAIL_HOST: ${MAIL_HOST:-mailhog}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@pia.local}
+      GEOCODING_PROVIDER: ${GEOCODING_PROVIDER:-nominatim}
+      ADMIN_INITIAL_EMAIL: ${ADMIN_INITIAL_EMAIL:-admin@pia.local}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-changeme_admin_password}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ---- Frontend ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+        VITE_MAP_PROVIDER: ${VITE_MAP_PROVIDER:-leaflet}
+        VITE_MAPTILER_KEY: ${VITE_MAPTILER_KEY:-}
+    container_name: pia_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:
+    driver: local

@@ -1,0 +1,29 @@
+# Dev profile — enables verbose logging and relaxed settings
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  mail:
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+logging:
+  level:
+    com.pia: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+# Disable strict CORS in dev (handled by SecurityConfig)
+pia:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://localhost:3000
